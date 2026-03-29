@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Code Reviewer</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 2rem;
+            color: #58a6ff;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: #8b949e;
+            margin-bottom: 40px;
+        }
+
+        .input-section {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 14px 18px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            color: #c9d1d9;
+            font-size: 1rem;
+            margin-bottom: 16px;
+            outline: none;
+        }
+
+        input[type="text"]:focus {
+            border-color: #58a6ff;
+        }
+
+        button {
+            background: #238636;
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s;
+        }
+
+        button:hover { background: #2ea043; }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #30363d;
+            border-top: 4px solid #58a6ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #58a6ff;
+            margin-top: 16px;
+            padding: 10px;
+        }
+
+        .error {
+            background: #3d1c1c;
+            border: 1px solid #f85149;
+            color: #f85149;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .review-section {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 30px;
+        }
+
+        .review-section h2 {
+            color: #58a6ff;
+            margin-bottom: 20px;
+            font-size: 1.4rem;
+        }
+
+        .review-content {
+            white-space: pre-wrap;
+            line-height: 1.8;
+            font-size: 0.95rem;
+        }
+
+        .saved-badge {
+            display: inline-block;
+            background: #1f4a1f;
+            color: #3fb950;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+
+        .pr-info {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        .pr-title {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #58a6ff;
+            margin-bottom: 8px;
+        }
+
+        .pr-meta {
+            color: #8b949e;
+            font-size: 0.9rem;
+        }
+
+        .copy-btn {
+            background: #1f6feb !important;
+            color: white;
+            border: none;
+            padding: 6px 16px !important;
+            border-radius: 20px !important;
+            font-size: 0.85rem;
+            cursor: pointer;
+            width: auto !important;
+        }
+
+        .badges {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 AI Code Review Assistant</h1>
+        <p class="subtitle">Paste a GitHub PR URL and get an instant AI-powered code review</p>
+
+        <div class="input-section">
+            <form method="POST" onsubmit="showLoading()">
+                <input
+                    type="text"
+                    name="pr_url"
+                    placeholder="https://github.com/owner/repo/pull/123"
+                    value="{{ pr_url or '' }}"
+                    required
+                />
+                <button type="submit" id="submitBtn">🚀 Review this PR</button>
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>⏳ Fetching PR and analyzing code... this may take 10-20 seconds</p>
+                </div>
+            </form>
+        </div>
+
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+
+        {% if review %}
+        <div class="review-section">
+            <h2>📊 AI Code Review Results</h2>
+
+            {% if pr_info %}
+            <div class="pr-info">
+                <div class="pr-title">#{{ pr_info.number }} — {{ pr_info.title }}</div>
+                <div class="pr-meta">
+                    📁 {{ pr_info.repo }} &nbsp;|&nbsp;
+                    👤 {{ pr_info.author }} &nbsp;|&nbsp;
+                    📅 {{ pr_info.date }} &nbsp;|&nbsp;
+                    🔵 {{ pr_info.state }}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="badges">
+                <div class="saved-badge">💾 Review auto-saved to file</div>
+                <button class="copy-btn" onclick="copyReview()" id="copyBtn">📋 Copy Review</button>
+            </div>
+
+            <div class="review-content" id="reviewContent">{{ review }}</div>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <script>
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('submitBtn').innerText = '⏳ Reviewing...';
+        }
+
+        function copyReview() {
+            const text = document.getElementById('reviewContent').innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById('copyBtn');
+                btn.innerText = '✅ Copied!';
+                btn.style.background = '#238636';
+                setTimeout(() => {
+                    btn.innerText = '📋 Copy Review';
+                    btn.style.background = '#1f6feb';
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
