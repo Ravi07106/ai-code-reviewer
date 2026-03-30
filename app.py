@@ -57,7 +57,7 @@ def index():
         elif diff == "ERROR:UNKNOWN":
             error = "❌ Something went wrong! Please try again."
 
-        if diff == "ERROR:INVALID":
+        elif diff == "ERROR:INVALID":
             error = "❌ Invalid URL! Please use format: https://github.com/owner/repo/pull/123"
         elif diff:
             large_pr = diff.startswith("WARNING:")
