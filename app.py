@@ -56,6 +56,9 @@ def index():
             error = "❌ Access forbidden! You don't have permission to access this PR."
         elif diff == "ERROR:UNKNOWN":
             error = "❌ Something went wrong! Please try again."
+
+        if diff == "ERROR:INVALID":
+            error = "❌ Invalid URL! Please use format: https://github.com/owner/repo/pull/123"
         elif diff:
             large_pr = diff.startswith("WARNING:")
             if large_pr:

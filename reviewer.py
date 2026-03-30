@@ -15,10 +15,16 @@ client = Groq(api_key=GROQ_API_KEY)
 
 
 def get_pr_diff(pr_url):
-    parts = pr_url.strip("/").split("/")
-    owner = parts[3]
-    repo = parts[4]
-    pr_number = parts[6]
+    try:
+        parts = pr_url.strip("/").split("/")
+        if len(parts) < 7 or "github.com" not in pr_url or "pull" not in pr_url:
+            print("❌ Invalid URL format!")
+            return "ERROR:INVALID"
+        owner = parts[3]
+        repo = parts[4]
+        pr_number = parts[6]
+    except Exception:
+        return "ERROR:INVALID"
 
     print(f"📦 Fetching PR #{pr_number} from {owner}/{repo}...")
 
