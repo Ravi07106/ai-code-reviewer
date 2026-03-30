@@ -32,8 +32,12 @@ def get_pr_diff(pr_url):
     response = requests.get(api_url, headers=headers)
 
     if response.status_code == 200:
+        content = response.text
         print("✅ PR diff fetched successfully!")
-        return response.text
+        if len(content) > 8000:
+            print("⚠️ Large PR detected — review may be incomplete")
+            return "WARNING:" + content
+        return content
     elif response.status_code == 404:
         print("❌ PR not found!")
         return "ERROR:404"
@@ -79,6 +83,7 @@ def get_pr_info(pr_url):
 
 def review_code(diff):
     print("\n🤖 Sending code to Groq AI for review...\n")
+    print(f"Diff length: {len(diff)}")
 
     prompt = f"""
 You are an expert code reviewer. Analyze the following GitHub Pull Request diff and provide a detailed review.

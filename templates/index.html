@@ -15,12 +15,64 @@
             padding: 40px 20px;
         }
 
-        .container {
-            max-width: 900px;
+        .layout {
+            max-width: 1200px;
             margin: 0 auto;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 24px;
         }
 
-        h1 {
+        .sidebar {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 20px;
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+
+        .sidebar h3 {
+            color: #58a6ff;
+            margin-bottom: 16px;
+            font-size: 1rem;
+        }
+
+        .history-item {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .history-item:hover { border-color: #58a6ff; }
+
+        .history-item .h-title {
+            font-size: 0.85rem;
+            color: #c9d1d9;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-item .h-meta {
+            font-size: 0.75rem;
+            color: #8b949e;
+        }
+
+        .no-history {
+            color: #8b949e;
+            font-size: 0.85rem;
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .main h1 {
             font-size: 2rem;
             color: #58a6ff;
             margin-bottom: 8px;
@@ -28,15 +80,15 @@
 
         .subtitle {
             color: #8b949e;
-            margin-bottom: 40px;
+            margin-bottom: 24px;
         }
 
         .input-section {
             background: #161b22;
             border: 1px solid #30363d;
             border-radius: 12px;
-            padding: 30px;
-            margin-bottom: 30px;
+            padding: 24px;
+            margin-bottom: 24px;
         }
 
         input[type="text"] {
@@ -51,11 +103,9 @@
             outline: none;
         }
 
-        input[type="text"]:focus {
-            border-color: #58a6ff;
-        }
+        input[type="text"]:focus { border-color: #58a6ff; }
 
-        button {
+        button[type="submit"] {
             background: #238636;
             color: white;
             border: none;
@@ -67,7 +117,7 @@
             transition: background 0.2s;
         }
 
-        button:hover { background: #2ea043; }
+        button[type="submit"]:hover { background: #2ea043; }
 
         .spinner {
             width: 40px;
@@ -89,7 +139,6 @@
             text-align: center;
             color: #58a6ff;
             margin-top: 16px;
-            padding: 10px;
         }
 
         .error {
@@ -129,6 +178,25 @@
             font-size: 0.85rem;
         }
 
+        .copy-btn {
+            background: #1f6feb;
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            width: auto;
+        }
+
+        .badges {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
         .pr-info {
             background: #0d1117;
             border: 1px solid #30363d;
@@ -149,79 +217,167 @@
             font-size: 0.9rem;
         }
 
-        .copy-btn {
-            background: #1f6feb !important;
-            color: white;
-            border: none;
-            padding: 6px 16px !important;
-            border-radius: 20px !important;
-            font-size: 0.85rem;
-            cursor: pointer;
-            width: auto !important;
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            padding: 40px 20px;
+            overflow-y: auto;
         }
 
-        .badges {
-            display: flex;
-            gap: 12px;
-            align-items: center;
+        .modal-content {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 900px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 16px; right: 16px;
+            background: #f85149;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            width: auto;
+        }
+
+        .modal-review {
+            white-space: pre-wrap;
+            line-height: 1.8;
+            font-size: 0.95rem;
+            margin-top: 20px;
+        }
+
+        .warning-banner {
+            background: #3d2c00;
+            border: 1px solid #d29922;
+            color: #d29922;
+            padding: 12px 16px;
+            border-radius: 8px;
             margin-bottom: 16px;
+            font-size: 0.9rem;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🔍 AI Code Review Assistant</h1>
-        <p class="subtitle">Paste a GitHub PR URL and get an instant AI-powered code review</p>
+    <div class="layout">
 
-        <div class="input-section">
-            <form method="POST" onsubmit="showLoading()">
-                <input
-                    type="text"
-                    name="pr_url"
-                    placeholder="https://github.com/owner/repo/pull/123"
-                    value="{{ pr_url or '' }}"
-                    required
-                />
-                <button type="submit" id="submitBtn">🚀 Review this PR</button>
-                <div class="loading" id="loading">
-                    <div class="spinner"></div>
-                    <p>⏳ Fetching PR and analyzing code... this may take 10-20 seconds</p>
+        <!-- SIDEBAR -->
+        <div class="sidebar">
+            <h3>📋 Review History</h3>
+            {% if history %}
+                {% for item in history %}
+                <div class="history-item" onclick="showHistory({{ loop.index0 }})">
+                    <div class="h-title">#{{ item.number }} — {{ item.title }}</div>
+                    <div class="h-meta">{{ item.repo }} | {{ item.date }}</div>
                 </div>
-            </form>
+                {% endfor %}
+            {% else %}
+                <div class="no-history">No reviews yet.<br>Submit a PR to get started!</div>
+            {% endif %}
         </div>
 
-        {% if error %}
-        <div class="error">{{ error }}</div>
-        {% endif %}
+        <!-- MAIN CONTENT -->
+        <div class="main">
+            <h1>🔍 AI Code Review Assistant</h1>
+            <p class="subtitle">Paste a GitHub PR URL and get an instant AI-powered code review</p>
 
-        {% if review %}
-        <div class="review-section">
-            <h2>📊 AI Code Review Results</h2>
+            <div class="input-section">
+                <form method="POST" onsubmit="showLoading()">
+                    <input
+                        type="text"
+                        name="pr_url"
+                        placeholder="https://github.com/owner/repo/pull/123"
+                        value="{{ pr_url or '' }}"
+                        required
+                    />
+                    <button type="submit" id="submitBtn">🚀 Review this PR</button>
+                    <div class="loading" id="loading">
+                        <div class="spinner"></div>
+                        <p>⏳ Fetching PR and analyzing code... this may take 10-20 seconds</p>
+                    </div>
+                </form>
+            </div>
 
-            {% if pr_info %}
-            <div class="pr-info">
-                <div class="pr-title">#{{ pr_info.number }} — {{ pr_info.title }}</div>
-                <div class="pr-meta">
-                    📁 {{ pr_info.repo }} &nbsp;|&nbsp;
-                    👤 {{ pr_info.author }} &nbsp;|&nbsp;
-                    📅 {{ pr_info.date }} &nbsp;|&nbsp;
-                    🔵 {{ pr_info.state }}
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+
+            {% if review %}
+            <div class="review-section">
+                <h2>📊 AI Code Review Results</h2>
+
+                {% if pr_info %}
+                <div class="pr-info">
+                    <div class="pr-title">#{{ pr_info.number }} — {{ pr_info.title }}</div>
+                    <div class="pr-meta">
+                        📁 {{ pr_info.repo }} &nbsp;|&nbsp;
+                        👤 {{ pr_info.author }} &nbsp;|&nbsp;
+                        📅 {{ pr_info.date }} &nbsp;|&nbsp;
+                        🔵 {{ pr_info.state }}
+                    </div>
                 </div>
+                {% endif %}
+
+                {% if large_pr %}
+                <div class="warning-banner">
+                    ⚠️ This is a large PR — the review is based on the first 8000 characters of the diff. Some changes may not be covered.
+                </div>
+                {% endif %}
+
+                <div class="badges">
+                    <div class="saved-badge">💾 Review auto-saved to file</div>
+                    <button class="copy-btn" onclick="copyReview()" id="copyBtn">📋 Copy Review</button>
+                    <form method="POST" action="/download-pdf" style="display:inline;">
+                        <input type="hidden" name="review" value="{{ review }}">
+                        <input type="hidden" name="pr_title" value="{{ pr_info.title if pr_info else 'PR Review' }}">
+                        <input type="hidden" name="pr_repo" value="{{ pr_info.repo if pr_info else '' }}">
+                        <button type="submit" class="copy-btn" style="background: #6e40c9;">📄 Download PDF</button>
+                    </form>
+                </div>
+
+                <div class="review-content" id="reviewContent">{{ review }}</div>
             </div>
             {% endif %}
 
-            <div class="badges">
-                <div class="saved-badge">💾 Review auto-saved to file</div>
-                <button class="copy-btn" onclick="copyReview()" id="copyBtn">📋 Copy Review</button>
-            </div>
-
-            <div class="review-content" id="reviewContent">{{ review }}</div>
         </div>
-        {% endif %}
+    </div>
 
+    <!-- HISTORY MODAL -->
+    <div class="modal" id="historyModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal()">✕ Close</button>
+            <h2 id="modalTitle" style="color: #58a6ff;"></h2>
+            <div id="modalMeta" style="color: #8b949e; font-size: 0.9rem; margin-top: 8px;"></div>
+            <div class="modal-review" id="modalReview"></div>
+        </div>
     </div>
 
     <script>
+        const history = {{ history | tojson }};
+
+        function showHistory(index) {
+            const item = history[index];
+            document.getElementById('modalTitle').innerText = '#' + item.number + ' — ' + item.title;
+            document.getElementById('modalMeta').innerText = item.repo + ' | ' + item.date;
+            document.getElementById('modalReview').innerText = item.review;
+            document.getElementById('historyModal').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('historyModal').style.display = 'none';
+        }
+
         function showLoading() {
             document.getElementById('loading').style.display = 'block';
             document.getElementById('submitBtn').disabled = true;
