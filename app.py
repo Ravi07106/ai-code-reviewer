@@ -3,7 +3,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.units import inch
-from reviewer import get_pr_diff, review_code, save_review, get_pr_info
+from reviewer import get_pr_diff, review_code, save_review, get_pr_info, get_repo_files, review_repo
 import os
 import json
 import io
@@ -56,7 +56,6 @@ def index():
             error = "❌ Access forbidden! You don't have permission to access this PR."
         elif diff == "ERROR:UNKNOWN":
             error = "❌ Something went wrong! Please try again."
-
         elif diff == "ERROR:INVALID":
             error = "❌ Invalid URL! Please use format: https://github.com/owner/repo/pull/123"
         elif diff:
@@ -69,7 +68,33 @@ def index():
             save_history(pr_info, review)
             history = load_history()
 
-    return render_template("index.html", review=review, error=error, pr_url=pr_url, pr_info=pr_info, history=history, large_pr=large_pr)
+    return render_template("index.html", review=review, error=error,
+                           pr_url=pr_url, pr_info=pr_info,
+                           history=history, large_pr=large_pr)
+
+
+# 🔹 New route for repo review
+@app.route("/repo-review", methods=["GET", "POST"])
+def repo_review():
+    review = None
+    error = None
+    repo_url = None
+
+    if request.method == "POST":
+        repo_url = request.form.get("repo_url")
+        code = get_repo_files(repo_url)
+
+        if code == "ERROR:INVALID":
+            error = "❌ Invalid URL! Please use format: https://github.com/owner/repo"
+        elif code == "ERROR:404":
+            error = "❌ Repo not found! Make sure the URL is correct."
+        elif code == "ERROR:NOFILES":
+            error = "❌ No code files found in this repo!"
+        elif code:
+            review = review_repo(code)
+
+    return render_template("repo_review.html", review=review,
+                           error=error, repo_url=repo_url)
 
 
 @app.route("/download-pdf", methods=["POST"])
@@ -87,15 +112,15 @@ def download_pdf():
     story = []
 
     story.append(Paragraph("AI Code Review", styles['Title']))
-    story.append(Spacer(1, 0.2*inch))
+    story.append(Spacer(1, 0.2 * inch))
     story.append(Paragraph(f"PR: {pr_title}", styles['Heading2']))
     story.append(Paragraph(f"Repo: {pr_repo}", styles['Normal']))
-    story.append(Spacer(1, 0.3*inch))
+    story.append(Spacer(1, 0.3 * inch))
 
     for line in review.split('\n'):
         if line.strip():
             story.append(Paragraph(line, styles['Normal']))
-            story.append(Spacer(1, 0.1*inch))
+            story.append(Spacer(1, 0.1 * inch))
 
     doc.build(story)
     buffer.seek(0)
