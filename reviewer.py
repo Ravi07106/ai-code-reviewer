@@ -1,230 +1,88 @@
-import requests
-import os
-from dotenv import load_dotenv
-from groq import Groq
-import click
-
-# Load your secret keys from .env file
-load_dotenv()
-
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-# Setup Groq
-client = Groq(api_key=GROQ_API_KEY)
-
-
-def get_pr_diff(pr_url):
-    try:
-        parts = pr_url.strip("/").split("/")
-        if len(parts) < 7 or "github.com" not in pr_url or "pull" not in pr_url:
-            print("❌ Invalid URL format!")
-            return "ERROR:INVALID"
-        owner = parts[3]
-        repo = parts[4]
-        pr_number = parts[6]
-    except Exception:
-        return "ERROR:INVALID"
-
-    print(f"📦 Fetching PR #{pr_number} from {owner}/{repo}...")
-
-    api_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
-
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3.diff"
-    }
-
-    response = requests.get(api_url, headers=headers)
-
-    if response.status_code == 200:
-        content = response.text
-        print("✅ PR diff fetched successfully!")
-        if len(content) > 8000:
-            print("⚠️ Large PR detected — review may be incomplete")
-            return "WARNING:" + content
-        return content
-    elif response.status_code == 404:
-        print("❌ PR not found!")
-        return "ERROR:404"
-    elif response.status_code == 401:
-        print("❌ Invalid GitHub token!")
-        return "ERROR:401"
-    elif response.status_code == 403:
-        print("❌ Access forbidden!")
-        return "ERROR:403"
-    else:
-        print(f"❌ Error: {response.status_code}")
-        return "ERROR:UNKNOWN"
-
-
-def get_pr_info(pr_url):
-    """Gets PR title, author and date"""
-    parts = pr_url.strip("/").split("/")
-    owner = parts[3]
-    repo = parts[4]
-    pr_number = parts[6]
-
-    api_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
-
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-
-    response = requests.get(api_url, headers=headers)
-
-    if response.status_code == 200:
-        data = response.json()
-        return {
-            "title": data["title"],
-            "author": data["user"]["login"],
-            "date": data["created_at"][:10],
-            "repo": f"{owner}/{repo}",
-            "number": pr_number,
-            "state": data["state"]
-        }
-    return None
-
 
 def review_code(diff):
+    """Review a PR diff with evidence-based, conservative findings."""
     print("\n🤖 Sending code to Groq AI for review...\n")
     print(f"Diff length: {len(diff)}")
 
     prompt = f"""
-You are an expert code reviewer. Analyze the following GitHub Pull Request diff and provide a detailed review.
+You are a careful, evidence-driven code reviewer.
 
-Your review must include:
-1. 📋 SUMMARY - What does this PR do?
-2. ✅ GOOD THINGS - What is done well?
-3. ⚠️ ISSUES & BUGS - Any bugs, errors, or bad practices?
-4. 🔲 EDGE CASES - What edge cases are not handled?
-5. ⚡ OPTIMIZATIONS - How can the code be improved or made faster?
-6. 🔒 SECURITY - Any security concerns?
-7. 📝 FINAL VERDICT - Approve / Request Changes / Needs Discussion
+IMPORTANT RULES:
+1. Review only what the supplied PR diff supports.
+2. Never invent files, functions, variables, line numbers, or behavior.
+3. Do not report a bug merely because something might be wrong.
+4. For every issue, include:
+   - Title
+   - Severity: Critical, High, Medium, or Low
+   - File path and changed line number, when available
+   - Evidence: a short quote from the supplied diff
+   - Explanation of why the evidence indicates a problem
+   - Impact: what could happen if the issue is real
+   - Suggested fix
+   - Confidence: High, Medium, or Low
+5. If the diff does not provide enough evidence, label the concern
+   "Needs verification" and explain what additional context is needed.
+6. Do not claim that unchanged code is defective unless the diff
+   provides enough context to demonstrate the problem.
+7. Do not invent security vulnerabilities, performance problems,
+   or missing edge-case handling.
+8. Avoid duplicate findings. Do not report style preferences as bugs.
+9. If no concrete issue is supported, say so explicitly.
+10. Do not claim you ran tests, executed code, or verified behavior.
+    You have only the supplied diff unless other evidence is provided.
 
-Here is the PR diff:
+Write the review in this format:
+
+# PR Summary
+Explain the changes in simple English.
+
+# What Looks Good
+Mention only improvements supported by the diff.
+
+# Findings
+For each finding, use:
+- Title:
+- Severity:
+- Location:
+- Evidence:
+- Why this is a problem:
+- Real-world impact:
+- Suggested fix:
+- Confidence:
+
+Separate confirmed issues from concerns needing verification.
+
+# Missing Context
+List any important files or surrounding code needed to verify concerns.
+If none, say "No additional context identified."
+
+# Tests to Consider
+Suggest relevant tests without claiming they were executed.
+
+# Final Verdict
+Choose one:
+- Request Changes: at least one well-supported, important defect.
+- Needs Discussion: a significant concern requires more context.
+- Approve: no significant defect was identified in the supplied diff.
+
+An AI review is not proof that the code is correct or incorrect.
+
+PR DIFF:
 {diff[:8000]}
 """
 
     response = client.chat.completions.create(
         model="openai/gpt-oss-120b",
         messages=[
-            {"role": "user", "content": prompt}
-        ]
+            {
+                "role": "system",
+                "content": (
+                    "Be conservative, evidence-based, and explicit "
+                    "about uncertainty. Never fabricate code evidence."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
     )
 
     return response.choices[0].message.content
-
-
-def save_review(pr_url, review):
-    parts = pr_url.strip("/").split("/")
-    owner = parts[3]
-    repo = parts[4]
-    pr_number = parts[6]
-    filename = f"review_{owner}_{repo}_PR{pr_number}.md"
-
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(f"# AI Code Review — {owner}/{repo} PR #{pr_number}\n\n")
-        f.write(review)
-
-    print(f"\n💾 Review saved to: {filename}")
-    return filename
-
-
-def get_repo_files(repo_url):
-    """Fetches all code files from a GitHub repo"""
-    try:
-        parts = repo_url.strip("/").split("/")
-        if len(parts) < 5 or "github.com" not in repo_url:
-            return "ERROR:INVALID"
-        owner = parts[3]
-        repo = parts[4].replace(".git", "")
-    except Exception:
-        return "ERROR:INVALID"
-
-    print(f"📦 Fetching repo files from {owner}/{repo}...")
-
-    api_url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/HEAD?recursive=1"
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-
-    response = requests.get(api_url, headers=headers)
-
-    if response.status_code != 200:
-        return "ERROR:404"
-
-    tree = response.json().get("tree", [])
-
-    # Only get code files
-    code_extensions = ['.py', '.js', '.ts', '.html', '.css', '.java', '.cpp', '.c', '.go', '.rs']
-    code_files = [f for f in tree if f["type"] == "blob" and any(f["path"].endswith(ext) for ext in code_extensions)]
-
-    # Limit to first 10 files to avoid token limit
-    code_files = code_files[:10]
-
-    if not code_files:
-        return "ERROR:NOFILES"
-
-    all_code = ""
-    for file in code_files:
-        file_url = f"https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{file['path']}"
-        file_response = requests.get(file_url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-        if file_response.status_code == 200:
-            all_code += f"\n\n{'='*50}\nFile: {file['path']}\n{'='*50}\n"
-            all_code += file_response.text[:2000]  # limit each file to 2000 chars
-
-    print(f"✅ Fetched {len(code_files)} files!")
-    return all_code
-
-
-def review_repo(code):
-    """Sends entire repo code to AI for review"""
-    print("\n🤖 Sending repo to Groq AI for review...\n")
-
-    prompt = f"""
-You are an expert code reviewer. Analyze the following codebase and provide a detailed review.
-
-Your review must include:
-1. 📋 OVERVIEW - What does this project do?
-2. 🏗️ ARCHITECTURE - How is the code structured?
-3. ✅ GOOD THINGS - What is done well?
-4. ⚠️ ISSUES & BUGS - Any bugs, errors, or bad practices?
-5. 🔒 SECURITY - Any security concerns?
-6. ⚡ OPTIMIZATIONS - How can the code be improved?
-7. 📝 OVERALL VERDICT - Production ready / Needs Work / Good Start
-
-Here is the codebase:
-{code[:8000]}
-"""
-
-    response = client.chat.completions.create(
-       model="openai/gpt-oss-120b",
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    return response.choices[0].message.content
-@click.command()
-@click.option("--url", prompt="Paste a GitHub PR URL", help="GitHub PR URL to review")
-def main(url):
-    """🔍 AI Code Review Assistant — reviews any GitHub PR using AI"""
-    print("=== 🔍 AI Code Review Assistant ===\n")
-
-    diff = get_pr_diff(url)
-
-    if diff:
-        review = review_code(diff)
-        print("=" * 50)
-        print("📊 AI CODE REVIEW RESULTS")
-        print("=" * 50)
-        print(review)
-        print("=" * 50)
-        save_review(url, review)
-
-
-if __name__ == "__main__":
-    main()
