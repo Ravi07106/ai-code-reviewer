@@ -1,88 +1,574 @@
 
-def review_code(diff):
-    """Review a PR diff with evidence-based, conservative findings."""
-    print("\n🤖 Sending code to Groq AI for review...\n")
-    print(f"Diff length: {len(diff)}")
+import os
+from urllib.parse import urlparse
 
-    prompt = f"""
-You are a careful, evidence-driven code reviewer.
+import click
+import requests
+from dotenv import load_dotenv
+from groq import Groq
 
-IMPORTANT RULES:
-1. Review only what the supplied PR diff supports.
-2. Never invent files, functions, variables, line numbers, or behavior.
-3. Do not report a bug merely because something might be wrong.
-4. For every issue, include:
-   - Title
-   - Severity: Critical, High, Medium, or Low
-   - File path and changed line number, when available
-   - Evidence: a short quote from the supplied diff
-   - Explanation of why the evidence indicates a problem
-   - Impact: what could happen if the issue is real
-   - Suggested fix
-   - Confidence: High, Medium, or Low
-5. If the diff does not provide enough evidence, label the concern
-   "Needs verification" and explain what additional context is needed.
-6. Do not claim that unchanged code is defective unless the diff
-   provides enough context to demonstrate the problem.
-7. Do not invent security vulnerabilities, performance problems,
-   or missing edge-case handling.
-8. Avoid duplicate findings. Do not report style preferences as bugs.
-9. If no concrete issue is supported, say so explicitly.
-10. Do not claim you ran tests, executed code, or verified behavior.
-    You have only the supplied diff unless other evidence is provided.
+load_dotenv()
 
-Write the review in this format:
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# PR Summary
-Explain the changes in simple English.
+client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
-# What Looks Good
-Mention only improvements supported by the diff.
+GROQ_MODEL = "openai/gpt-oss-120b"
+GITHUB_API = "https://api.github.com"
+REQUEST_TIMEOUT = 30
 
-# Findings
-For each finding, use:
-- Title:
-- Severity:
-- Location:
-- Evidence:
-- Why this is a problem:
-- Real-world impact:
-- Suggested fix:
-- Confidence:
+CODE_EXTENSIONS = (
+    ".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css",
+    ".java", ".cpp", ".c", ".h", ".hpp", ".go", ".rs",
+    ".php", ".rb", ".swift", ".kt", ".sql", ".vue", ".json",
+)
 
-Separate confirmed issues from concerns needing verification.
+IGNORED_PATH_PARTS = {
+    "node_modules", "vendor", ".git", "dist", "build",
+    "__pycache__", ".venv", "venv", "coverage",
+}
 
-# Missing Context
-List any important files or surrounding code needed to verify concerns.
-If none, say "No additional context identified."
+MAX_REPO_FILES = 20
+MAX_FILE_CHARS = 3000
+MAX_REVIEW_INPUT_CHARS = 24000
+MAX_DIFF_CHARS = 12000
 
-# Tests to Consider
-Suggest relevant tests without claiming they were executed.
 
-# Final Verdict
-Choose one:
-- Request Changes: at least one well-supported, important defect.
-- Needs Discussion: a significant concern requires more context.
-- Approve: no significant defect was identified in the supplied diff.
+def _github_headers(accept="application/vnd.github+json"):
+    headers = {"Accept": accept}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    return headers
 
-An AI review is not proof that the code is correct or incorrect.
 
-PR DIFF:
-{diff[:8000]}
-"""
+def _parse_github_url(url, is_pr=False):
+    """Validate a GitHub URL and return its owner/repository details."""
+    try:
+        parsed = urlparse(url.strip())
+        if parsed.hostname not in {"github.com", "www.github.com"}:
+            return None
+
+        parts = [part for part in parsed.path.strip("/").split("/") if part]
+        if len(parts) < 2:
+            return None
+
+        owner = parts[0]
+        repo = parts[1].removesuffix(".git")
+
+        if not owner or not repo:
+            return None
+
+        result = {"owner": owner, "repo": repo}
+
+        if is_pr:
+            if len(parts) < 4 or parts[2] != "pull":
+                return None
+            if not parts[3].isdigit():
+                return None
+            result["number"] = parts[3]
+
+        return result
+    except (ValueError, AttributeError):
+        return None
+
+
+def _github_error(response):
+    """Return a useful error code for common GitHub API failures."""
+    if response.status_code == 401:
+        return "ERROR:401"
+    if response.status_code == 403:
+        return "ERROR:403"
+    if response.status_code == 404:
+        return "ERROR:404"
+    return "ERROR:UNKNOWN"
+
+
+def get_pr_diff(pr_url):
+    """Fetch a pull request diff from GitHub."""
+    details = _parse_github_url(pr_url, is_pr=True)
+    if not details:
+        print("Invalid GitHub pull request URL.")
+        return "ERROR:INVALID"
+
+    owner = details["owner"]
+    repo = details["repo"]
+    number = details["number"]
+
+    print(f"Fetching PR #{number} from {owner}/{repo}...")
+
+    api_url = f"{GITHUB_API}/repos/{owner}/{repo}/pulls/{number}"
+
+    try:
+        response = requests.get(
+            api_url,
+            headers=_github_headers("application/vnd.github.diff"),
+            timeout=REQUEST_TIMEOUT,
+        )
+
+        if response.status_code != 200:
+            print(f"GitHub returned status {response.status_code}.")
+            return _github_error(response)
+
+        diff = response.text
+        if not diff.strip():
+            print("The pull request diff is empty.")
+            return "ERROR:EMPTY"
+
+        print("Pull request diff fetched successfully.")
+        if len(diff) > MAX_DIFF_CHARS:
+            print("Warning: the diff is large; this review will use a partial diff.")
+            return "WARNING:" + diff
+
+        return diff
+
+    except requests.RequestException as exc:
+        print(f"Could not fetch pull request: {exc}")
+        return "ERROR:NETWORK"
+
+
+def get_pr_info(pr_url):
+    """Return basic pull request information."""
+    details = _parse_github_url(pr_url, is_pr=True)
+    if not details:
+        return None
+
+    owner = details["owner"]
+    repo = details["repo"]
+    number = details["number"]
+
+    try:
+        response = requests.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/pulls/{number}",
+            headers=_github_headers(),
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code != 200:
+            return None
+
+        data = response.json()
+        return {
+            "title": data.get("title", "Untitled PR"),
+            "author": data.get("user", {}).get("login", "Unknown"),
+            "date": data.get("created_at", "")[:10],
+            "repo": f"{owner}/{repo}",
+            "number": number,
+            "state": data.get("state", "unknown"),
+        }
+
+    except (requests.RequestException, ValueError, KeyError):
+        return None
+
+
+def _call_ai(prompt, system_message=None):
+    """Call the configured Groq model and return its response text."""
+    if client is None:
+        raise RuntimeError(
+            "GROQ_API_KEY is missing. Add it to your environment variables."
+        )
+
+    messages = []
+    if system_message:
+        messages.append({"role": "system", "content": system_message})
+    messages.append({"role": "user", "content": prompt})
 
     response = client.chat.completions.create(
-        model="openai/gpt-oss-120b",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "Be conservative, evidence-based, and explicit "
-                    "about uncertainty. Never fabricate code evidence."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ],
+        model=GROQ_MODEL,
+        messages=messages,
+        temperature=0.1,
     )
 
-    return response.choices[0].message.content
+    content = response.choices[0].message.content
+    if not content:
+        raise RuntimeError("The AI returned an empty response.")
+
+    return content
+
+
+def review_code(diff):
+    """Review a PR diff with evidence-based and beginner-friendly findings."""
+    print("\nSending pull request diff to the AI reviewer...")
+    print(f"Diff length: {len(diff)} characters")
+
+    if diff.startswith("ERROR:"):
+        return f"PR review could not start. GitHub returned: {diff}"
+
+    was_truncated = len(diff) > MAX_DIFF_CHARS
+    if diff.startswith("WARNING:"):
+        diff = diff[len("WARNING:"):]
+
+    truncated_diff = len(diff) > MAX_DIFF_CHARS
+    was_truncated = was_truncated or truncated_diff
+    diff_for_review = diff[:MAX_DIFF_CHARS]
+
+    completeness_note = (
+        "IMPORTANT: The supplied diff is partial because it exceeded the "
+        "review input limit. Do not treat the review as complete. Mention "
+        "that some changes may not have been examined."
+        if was_truncated
+        else "The diff was within the configured character limit. This does "
+        "not guarantee that all relevant repository context is available."
+    )
+
+    prompt = f"""
+You are a conservative, evidence-driven code reviewer who explains
+software problems to beginners.
+
+Your job is to identify real, actionable problems—not to invent findings.
+
+REVIEW RULES:
+1. Base every finding on evidence in the supplied diff.
+2. Never invent filenames, functions, variables, line numbers, or code.
+3. Cite the actual file path and changed line number when they can be
+   determined from the diff. If the exact line is unavailable, say so.
+4. Include a short, exact quote from the diff as evidence for each finding.
+5. Explain why that evidence demonstrates a defect. A suspicious-looking
+   line by itself is not proof that the program is broken.
+6. Distinguish confirmed defects from concerns that need more context.
+7. If a concern cannot be verified from the diff, place it under
+   "Needs Verification", not under confirmed bugs.
+8. Do not claim that tests were run or code was executed.
+9. Avoid duplicate findings and purely stylistic complaints.
+10. Do not label normal design choices as bugs without evidence.
+11. Do not recommend a fix unless it addresses the stated problem.
+12. Use simple English. Explain technical terms the first time they appear.
+13. For each finding, explain what the code does, what could go wrong,
+    why it matters to a user or developer, and how to fix it.
+14. Do not invent security, performance, or edge-case problems.
+15. If no concrete bug is supported, say that no confirmed bug was
+    identified in the supplied diff. Do not claim the code is bug-free.
+
+{completeness_note}
+
+OUTPUT FORMAT:
+
+# 1. PR Summary
+Explain what the changes appear to do in simple English.
+
+# 2. What Looks Good
+Mention only improvements that are supported by the diff.
+
+# 3. Confirmed Findings
+For each supported defect, provide:
+
+### Finding: [short descriptive title]
+- Severity: Critical / High / Medium / Low
+- Location: file and changed line, if available
+- Evidence: exact short quote from the supplied diff
+- What this code does: explain the relevant behavior simply
+- Why it is a problem: explain the specific reasoning
+- Real-world impact: describe what could happen
+- Suggested fix: give a practical correction
+- Confidence: High / Medium / Low
+
+Do not include a finding here unless the supplied evidence supports it.
+
+# 4. Needs Verification
+For each plausible but unconfirmed concern, explain what is suspicious,
+what is not yet known, and which surrounding code or test would verify it.
+Do not present these as confirmed bugs.
+
+# 5. Tests to Consider
+Suggest specific tests relevant to the changed behavior.
+Do not claim these tests were executed.
+
+# 6. Final Verdict
+Choose Request Changes, Needs Discussion, or Approve.
+Explain the verdict briefly and state the limitations of this review.
+An Approve verdict means no significant issue was identified in the
+available evidence; it does not guarantee correctness.
+
+PULL REQUEST DIFF:
+{diff_for_review}
+"""
+
+    system_message = (
+        "You are a careful reviewer. Evidence must support each finding. "
+        "State uncertainty openly. Explain technical concepts in plain "
+        "English. Never fabricate evidence or claim unperformed tests."
+    )
+
+    try:
+        return _call_ai(prompt, system_message)
+    except Exception as exc:
+        print(f"AI review failed: {exc}")
+        return (
+            "The AI review could not be completed. Check the Render logs "
+            "for the underlying error and verify the Groq configuration."
+        )
+
+
+def save_review(pr_url, review):
+    """Save a pull request review as a Markdown file."""
+    details = _parse_github_url(pr_url, is_pr=True)
+    if not details:
+        raise ValueError("Cannot save review: invalid GitHub pull request URL.")
+
+    owner = details["owner"]
+    repo = details["repo"]
+    number = details["number"]
+    filename = f"review_{owner}_{repo}_PR{number}.md"
+
+    with open(filename, "w", encoding="utf-8") as file:
+        file.write(f"# AI Code Review — {owner}/{repo} PR #{number}\n\n")
+        file.write(review)
+
+    print(f"Review saved to: {filename}")
+    return filename
+
+
+def get_repo_files(repo_url):
+    """Fetch a limited, documented sample of source files from a repository."""
+    details = _parse_github_url(repo_url)
+    if not details:
+        print("Invalid GitHub repository URL.")
+        return "ERROR:INVALID"
+
+    owner = details["owner"]
+    repo = details["repo"]
+    print(f"Fetching repository files from {owner}/{repo}...")
+
+    try:
+        repo_response = requests.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}",
+            headers=_github_headers(),
+            timeout=REQUEST_TIMEOUT,
+        )
+        if repo_response.status_code != 200:
+            print(f"Could not access repository: {repo_response.status_code}")
+            return _github_error(repo_response)
+
+        default_branch = repo_response.json().get("default_branch", "main")
+
+        tree_response = requests.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/git/trees/"
+            f"{default_branch}?recursive=1",
+            headers=_github_headers(),
+            timeout=REQUEST_TIMEOUT,
+        )
+        if tree_response.status_code != 200:
+            print(f"Could not fetch repository tree: {tree_response.status_code}")
+            return _github_error(tree_response)
+
+        tree_data = tree_response.json()
+        tree = tree_data.get("tree", [])
+
+        code_files = [
+            item for item in tree
+            if item.get("type") == "blob"
+            and item.get("path", "").lower().endswith(CODE_EXTENSIONS)
+            and not any(
+                part in IGNORED_PATH_PARTS
+                for part in item.get("path", "").split("/")
+            )
+        ]
+
+        # Prioritize application code over generated or documentation files.
+        code_files.sort(
+            key=lambda item: (
+                item.get("path", "").lower().endswith(
+                    (".html", ".css", ".json")
+                ),
+                item.get("path", "").count("/"),
+                item.get("path", ""),
+            )
+        )
+
+        selected_files = code_files[:MAX_REPO_FILES]
+        if not selected_files:
+            return "ERROR:NOFILES"
+
+        sections = [
+            f"Repository: {owner}/{repo}\n"
+            f"Default branch: {default_branch}\n"
+            f"Source files found: {len(code_files)}\n"
+            f"Files selected for review: {len(selected_files)}\n"
+            f"File selection limit: {MAX_REPO_FILES}\n"
+            "IMPORTANT: This is a partial repository sample, not the full "
+            "codebase. Findings must not assume unprovided files are absent."
+        ]
+
+        total_chars = sum(len(section) for section in sections)
+        fetched_count = 0
+
+        for item in selected_files:
+            path = item["path"]
+            raw_url = (
+                f"https://raw.githubusercontent.com/{owner}/{repo}/"
+                f"{default_branch}/{path}"
+            )
+
+            file_response = requests.get(
+                raw_url,
+                headers=_github_headers("application/vnd.github.raw+json"),
+                timeout=REQUEST_TIMEOUT,
+            )
+            if file_response.status_code != 200:
+                print(f"Skipping inaccessible file: {path}")
+                continue
+
+            content = file_response.text
+            is_truncated = len(content) > MAX_FILE_CHARS
+            content = content[:MAX_FILE_CHARS]
+
+            section = (
+                f"\n\n{'=' * 60}\n"
+                f"FILE: {path}\n"
+                f"File content truncated: {is_truncated}\n"
+                f"{'=' * 60}\n"
+                f"{content}\n"
+            )
+
+            if total_chars + len(section) > MAX_REVIEW_INPUT_CHARS:
+                sections.append(
+                    "\nRepository sample limit reached. Additional files "
+                    "were not included; do not assume they are missing."
+                )
+                break
+
+            sections.append(section)
+            total_chars += len(section)
+            fetched_count += 1
+
+        if fetched_count == 0:
+            return "ERROR:NOFILES"
+
+        print(
+            f"Fetched {fetched_count} source files "
+            f"from {owner}/{repo}."
+        )
+        return "\n".join(sections)
+
+    except requests.RequestException as exc:
+        print(f"Repository fetch failed: {exc}")
+        return "ERROR:NETWORK"
+    except (ValueError, KeyError) as exc:
+        print(f"Could not process repository response: {exc}")
+        return "ERROR:UNKNOWN"
+
+
+def review_repo(code):
+    """Review a repository sample with clear limits and cautious findings."""
+    print("\nSending repository sample to the AI reviewer...")
+
+    if code.startswith("ERROR:"):
+        return f"Repository review could not start. GitHub returned: {code}"
+
+    prompt = f"""
+You are a conservative software reviewer and patient programming mentor.
+Explain your findings in simple English to someone who may be new to
+this codebase.
+
+IMPORTANT LIMITATIONS:
+The supplied input is only a sample of the repository. Some files may
+be omitted and some file contents may be truncated. The metadata in the
+input identifies the files and truncation where available.
+Never conclude that a function, validation check, security control, or
+configuration is missing from the entire project just because it does
+not appear in this sample.
+
+EVIDENCE RULES:
+1. Every confirmed finding must quote a short, exact piece of supplied
+   source code and name the file it came from.
+2. Include a line number only when it can be reliably established.
+   Otherwise say "line number not available".
+3. Explain why the quoted code causes a specific problem.
+4. A possible risk is not automatically a bug. Put unverified concerns
+   in the Needs Verification section.
+5. Do not invent code, filenames, dependencies, execution results, or tests.
+6. Do not claim the project is production-ready or unsafe without
+   enough evidence.
+7. Do not report missing security controls unless the provided context
+   supports the claim.
+8. Explain what the code does, why it matters, and how to improve it.
+9. Avoid duplicates, vague advice, and style-only issues.
+10. If the evidence is insufficient, state the limitation explicitly.
+
+OUTPUT FORMAT:
+
+# 1. Project Overview
+Explain what the supplied code appears to do. Separate facts from guesses.
+
+# 2. How the Project Is Organized
+Describe only the files and relationships supported by the sample.
+Mention that not all files may have been included.
+
+# 3. Confirmed Findings
+For every finding, use:
+
+### Finding: [clear title]
+- Severity: Critical / High / Medium / Low
+- File:
+- Line: if reliably known
+- Evidence: exact short code quote
+- Simple explanation: explain it as if to a beginner
+- Why it matters: concrete consequence
+- Suggested fix: actionable next step
+- Confidence: High / Medium / Low
+
+Only include supported problems.
+
+# 4. Needs Verification
+List possible problems that need additional files, context, or tests.
+Explain exactly what evidence is missing.
+
+# 5. Good Practices Observed
+Mention only practices actually visible in the supplied code.
+
+# 6. Recommended Improvements
+Prioritize the most useful next steps. Clearly distinguish suggestions
+from confirmed defects.
+
+# 7. Tests to Consider
+Suggest tests; do not claim they were run.
+
+# 8. Overall Assessment
+Summarize what can and cannot be concluded from this partial sample.
+Do not call the entire project production-ready based only on this sample.
+
+REPOSITORY SAMPLE:
+{code[:MAX_REVIEW_INPUT_CHARS]}
+"""
+
+    try:
+        return _call_ai(
+            prompt,
+            "Be evidence-based, cautious about incomplete context, "
+            "and beginner-friendly. Never invent findings.",
+        )
+    except Exception as exc:
+        print(f"Repository AI review failed: {exc}")
+        return (
+            "The repository review could not be completed. Check the "
+            "Render logs for the underlying error and verify Groq settings."
+        )
+
+
+@click.command()
+@click.option("--url", prompt="Paste a GitHub PR URL", help="GitHub PR URL to review")
+def main(url):
+    """AI Code Review Assistant — reviews a GitHub pull request."""
+    print("=== AI Code Review Assistant ===\n")
+
+    diff = get_pr_diff(url)
+
+    if not diff or diff.startswith("ERROR:"):
+        print(f"Could not review this pull request: {diff}")
+        return
+
+    review = review_code(diff)
+
+    print("=" * 50)
+    print("AI CODE REVIEW RESULTS")
+    print("=" * 50)
+    print(review)
+    print("=" * 50)
+
+    try:
+        save_review(url, review)
+    except (OSError, ValueError) as exc:
+        print(f"Could not save review: {exc}")
+
+
+if __name__ == "__main__":
+    main()
