@@ -1,4 +1,3 @@
-
 import os
 from urllib.parse import urlparse
 
@@ -398,6 +397,7 @@ def get_repo_files(repo_url):
                 f"{default_branch}/{path}"
             )
 
+
             file_response = requests.get(
                 raw_url,
                 headers=_github_headers("application/vnd.github.raw+json"),
@@ -447,6 +447,13 @@ def get_repo_files(repo_url):
         return "ERROR:UNKNOWN"
 
 
+
+def review_repo(code):
+    """Review a repository sample with beginner-friendly explanations."""
+    print("\nSending repository sample to the AI reviewer...")
+
+    if code.startswith("ERROR:"):
+        return f"Repository review could not start. GitHub returned: {code}"
 
     prompt = f"""
 You are a careful software reviewer and a patient programming mentor.
