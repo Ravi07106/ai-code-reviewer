@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0d1117">
+    <meta name="description" content="Review GitHub repositories and pull requests with AI-powered code analysis. Understand your code, discover potential issues, and improve code quality.">
+    <title>AI Code Reviewer — Understand Your Code Better</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --blue: #58a6ff;
+            --green: #3fb950;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .navbar {
+            max-width: 1180px;
+            margin: auto;
+            padding: 25px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+
+        .brand-icon {
+            display: grid;
+            place-items: center;
+            width: 42px;
+            height: 42px;
+            border: 1px solid #28558a;
+            border-radius: 12px;
+            background: #142b45;
+            font-size: 1.3rem;
+        }
+
+        .nav-tag {
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+
+        .hero {
+            max-width: 1050px;
+            margin: auto;
+            padding: 100px 25px 75px;
+            text-align: center;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            padding: 9px 15px;
+            border: 1px solid #303f50;
+            border-radius: 50px;
+            background: #131d29;
+            color: #79c0ff;
+            font-size: 0.85rem;
+            margin-bottom: 30px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 12px #3fb95080;
+        }
+
+        h1 {
+            max-width: 900px;
+            margin: 0 auto 24px;
+            font-size: clamp(2.7rem, 6vw, 5rem);
+            line-height: 1.08;
+            letter-spacing: -3px;
+            font-weight: 750;
+        }
+
+        .gradient {
+            background: linear-gradient(100deg, #58a6ff, #bc8cff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .hero-description {
+            max-width: 700px;
+            margin: 0 auto;
+            color: var(--muted);
+            font-size: 1.12rem;
+            line-height: 1.9;
+        }
+
+        .hero-actions {
+            display: flex;
+            justify-content: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-top: 35px;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 15px 24px;
+            border-radius: 9px;
+            font-weight: 650;
+            font-size: 0.97rem;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+        }
+
+        .button-primary {
+            color: #fff;
+            background: #238636;
+            border: 1px solid #2ea043;
+        }
+
+        .button-primary:hover {
+            background: #2ea043;
+        }
+
+        .button-secondary {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        .button-secondary:hover {
+            background: #212830;
+        }
+
+        .features {
+            max-width: 1050px;
+            margin: 0 auto;
+            padding: 30px 25px 85px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .feature-card {
+            padding: 26px;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: linear-gradient(145deg, #161b22, #11161d);
+        }
+
+        .feature-icon {
+            width: 46px;
+            height: 46px;
+            display: grid;
+            place-items: center;
+            border-radius: 12px;
+            background: #142b45;
+            font-size: 1.35rem;
+            margin-bottom: 20px;
+        }
+
+        .feature-card h2 {
+            font-size: 1.05rem;
+            margin-bottom: 10px;
+        }
+
+        .feature-card p {
+            color: var(--muted);
+            font-size: 0.91rem;
+            line-height: 1.8;
+        }
+
+        .bottom-cta {
+            max-width: 1000px;
+            margin: 0 auto 70px;
+            padding: 40px 25px;
+            text-align: center;
+            border: 1px solid #263e59;
+            border-radius: 16px;
+            background: radial-gradient(ellipse at top, #172b40, #111820 75%);
+        }
+
+        .bottom-cta h2 {
+            font-size: 1.8rem;
+            margin-bottom: 12px;
+        }
+
+        .bottom-cta p {
+            color: var(--muted);
+            margin-bottom: 25px;
+            line-height: 1.7;
+        }
+
+        footer {
+            padding: 25px;
+            border-top: 1px solid #21262d;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+
+        @media (max-width: 700px) {
+            .navbar {
+                padding: 20px;
+            }
+
+            .nav-tag {
+                display: none;
+            }
+
+            .hero {
+                padding: 75px 22px 55px;
+            }
+
+            h1 {
+                letter-spacing: -1.5px;
+            }
+
+            .hero-description {
+                font-size: 1rem;
+            }
+
+            .features {
+                grid-template-columns: 1fr;
+                padding-bottom: 55px;
+            }
+
+            .bottom-cta {
+                margin: 0 18px 45px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="navbar">
+        <a class="brand" href="/" aria-label="AI Code Reviewer home">
+            <span class="brand-icon">⌘</span>
+            <span>AI Code Reviewer</span>
+        </a>
+
+        <div class="nav-tag">AI-powered code analysis</div>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="eyebrow">
+                <span class="status-dot"></span>
+                Your intelligent code review assistant
+            </div>
+
+            <h1>
+                Write better code.<br>
+                <span class="gradient">Understand every change.</span>
+            </h1>
+
+            <p class="hero-description">
+                Your personal AI-powered code review assistant. Analyze GitHub
+                repositories or pull requests, understand how the code works,
+                and discover potential issues with explanations designed to
+                make code easier to understand.
+            </p>
+
+            <div class="hero-actions">
+                <a href="/review" class="button button-primary">
+                    Get Started <span>→</span>
+                </a>
+
+                <a href="/review" class="button button-secondary">
+                    Explore Review Options
+                </a>
+            </div>
+        </section>
+
+        <section class="features" aria-label="Features">
+            <article class="feature-card">
+                <div class="feature-icon">📁</div>
+                <h2>Repository Analysis</h2>
+                <p>
+                    Analyze a GitHub repository and get an AI-generated
+                    explanation of its codebase, along with potential issues
+                    and suggestions for improvement.
+                </p>
+            </article>
+
+            <article class="feature-card">
+                <div class="feature-icon">🔀</div>
+                <h2>Pull Request Review</h2>
+                <p>
+                    Review proposed changes in a GitHub pull request and
+                    understand what changed, why it matters, and what may
+                    need attention.
+                </p>
+            </article>
+
+            <article class="feature-card">
+                <div class="feature-icon">💡</div>
+                <h2>Beginner-Friendly Insights</h2>
+                <p>
+                    Get explanations that help you understand unfamiliar code,
+                    identify potential bugs, and learn from your projects.
+                </p>
+            </article>
+        </section>
+
+        <section class="bottom-cta">
+            <h2>Ready to understand your code better?</h2>
+            <p>
+                Choose what you want to review and let the analysis begin.
+            </p>
+
+            <a href="/review" class="button button-primary">
+                Choose Review Type →
+            </a>
+        </section>
+    </main>
+
+    <footer>
+        AI Code Reviewer · Understand your code, one review at a time.
+    </footer>
+</body>
+</html>
