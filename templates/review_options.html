@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0d1117">
+    <title>Choose Review Type — AI Code Reviewer</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #0d1117;
+            color: #e6edf3;
+            min-height: 100vh;
+            padding: 25px;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .container {
+            max-width: 1050px;
+            margin: 0 auto;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 75px;
+            gap: 15px;
+        }
+
+        .brand {
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .back-link {
+            color: #8b949e;
+            font-size: 0.92rem;
+        }
+
+        .back-link:hover {
+            color: #58a6ff;
+        }
+
+        .heading {
+            text-align: center;
+            margin-bottom: 45px;
+        }
+
+        .eyebrow {
+            color: #79c0ff;
+            font-size: 0.85rem;
+            margin-bottom: 18px;
+        }
+
+        h1 {
+            font-size: clamp(2rem, 5vw, 3.2rem);
+            letter-spacing: -1.5px;
+            margin-bottom: 17px;
+        }
+
+        .heading p {
+            max-width: 650px;
+            margin: 0 auto;
+            color: #8b949e;
+            font-size: 1rem;
+            line-height: 1.8;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 24px;
+        }
+
+        .card {
+            display: flex;
+            flex-direction: column;
+            min-height: 360px;
+            padding: 32px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 16px;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: #58a6ff;
+        }
+
+        .icon {
+            width: 58px;
+            height: 58px;
+            display: grid;
+            place-items: center;
+            border: 1px solid #284b70;
+            border-radius: 15px;
+            background: #142b45;
+            font-size: 1.7rem;
+            margin-bottom: 25px;
+        }
+
+        .card h2 {
+            font-size: 1.45rem;
+            margin-bottom: 14px;
+        }
+
+        .card p {
+            color: #8b949e;
+            line-height: 1.8;
+            font-size: 0.95rem;
+            margin-bottom: 25px;
+        }
+
+        .examples {
+            margin-bottom: 28px;
+            padding: 15px;
+            border: 1px solid #30363d;
+            border-radius: 9px;
+            background: #0d1117;
+            color: #8b949e;
+            font-size: 0.85rem;
+            line-height: 1.8;
+        }
+
+        .examples strong {
+            color: #c9d1d9;
+        }
+
+        .card-button {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            margin-top: auto;
+            padding: 14px 18px;
+            border-radius: 9px;
+            background: #238636;
+            border: 1px solid #2ea043;
+            color: #fff;
+            font-weight: 650;
+            transition: background 0.2s;
+        }
+
+        .card-button:hover {
+            background: #2ea043;
+        }
+
+        .pr-button {
+            background: #1f6feb;
+            border-color: #388bfd;
+        }
+
+        .pr-button:hover {
+            background: #388bfd;
+        }
+
+        .note {
+            text-align: center;
+            margin-top: 35px;
+            color: #8b949e;
+            font-size: 0.85rem;
+            line-height: 1.7;
+        }
+
+        footer {
+            text-align: center;
+            color: #6e7681;
+            font-size: 0.82rem;
+            margin-top: 75px;
+        }
+
+        @media (max-width: 720px) {
+            body {
+                padding: 20px;
+            }
+
+            .topbar {
+                margin-bottom: 55px;
+            }
+
+            .cards {
+                grid-template-columns: 1fr;
+            }
+
+            .card {
+                min-height: auto;
+                padding: 25px;
+            }
+
+            footer {
+                margin-top: 50px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <header class="topbar">
+            <a href="/" class="brand">⌘ AI Code Reviewer</a>
+            <a href="/" class="back-link">← Back to Home</a>
+        </header>
+
+        <section class="heading">
+            <div class="eyebrow">STEP 01 · SELECT YOUR REVIEW</div>
+            <h1>What would you like to review?</h1>
+            <p>
+                Choose the type of analysis you need. Review an entire
+                repository to understand a project or inspect a pull request
+                to focus on proposed code changes.
+            </p>
+        </section>
+
+        <section class="cards">
+            <article class="card">
+                <div class="icon">📁</div>
+
+                <h2>Repository Review</h2>
+
+                <p>
+                    Understand a project's structure and purpose. Get an
+                    AI-powered review of the available code files, with
+                    explanations and suggestions to help you improve the
+                    codebase.
+                </p>
+
+                <div class="examples">
+                    <strong>You'll need:</strong><br>
+                    A public GitHub repository URL<br>
+                    Example: github.com/owner/repo
+                </div>
+
+                <a href="/repo-review" class="card-button">
+                    Review a Repository <span>→</span>
+                </a>
+            </article>
+
+            <article class="card">
+                <div class="icon">🔀</div>
+
+                <h2>Pull Request Review</h2>
+
+                <p>
+                    Focus on a specific set of proposed changes. Get an
+                    AI-powered explanation of the pull request and identify
+                    potential bugs or improvements in the diff.
+                </p>
+
+                <div class="examples">
+                    <strong>You'll need:</strong><br>
+                    A GitHub pull request URL<br>
+                    Example: github.com/owner/repo/pull/123
+                </div>
+
+                <a href="/pr-review" class="card-button pr-button">
+                    Review a Pull Request <span>→</span>
+                </a>
+            </article>
+        </section>
+
+        <p class="note">
+            Reviews are AI-generated. Always verify important findings
+            against your actual code and project requirements.
+        </p>
+
+        <footer>
+            AI Code Reviewer · Choose a review and get started.
+        </footer>
+    </main>
+</body>
+</html>
